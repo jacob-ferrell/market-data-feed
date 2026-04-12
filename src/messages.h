@@ -7,42 +7,42 @@ typedef enum { ADD, CANCEL, MODIFY, TRADE } MessageType;
 typedef enum { BID, ASK } Side;
 
 typedef struct {
-  std::uint64_t order_id;
-  std::uint64_t sequence_num;
-  char ticker[8];
-  std::uint64_t timestamp;
-  std::uint32_t price;
-  std::uint32_t quantity;
-  Side side;
+    std::uint64_t order_id;
+    std::uint64_t sequence_num;
+    char ticker[8];
+    std::uint64_t timestamp;
+    std::uint32_t price;
+    std::uint32_t quantity;
+    Side side;
 } add_order_msg;
 
 static_assert(sizeof(add_order_msg) == 48, "add_order_msg size mismatch");
 
 typedef struct {
-  std::uint64_t order_id;
-  std::uint64_t sequence_num;
-  std::uint64_t timestamp;
-  char ticker[8];
+    std::uint64_t order_id;
+    std::uint64_t sequence_num;
+    std::uint64_t timestamp;
+    char ticker[8];
 } cancel_order_msg;
 
 static_assert(sizeof(cancel_order_msg) == 32, "cancel_order_msg size mismatch");
 
 typedef struct {
-  std::uint64_t order_id;
-  std::uint64_t sequence_num;
-  std::uint64_t timestamp;
-  char ticker[8];
-  std::uint32_t quantity;
+    std::uint64_t order_id;
+    std::uint64_t sequence_num;
+    std::uint64_t timestamp;
+    char ticker[8];
+    std::uint32_t quantity;
 } modify_order_msg;
 
 static_assert(sizeof(modify_order_msg) == 40, "modify_order_msg size mismatch");
 
 typedef struct {
-  std::uint64_t sequence_num;
-  std::uint64_t timestamp;
-  char ticker[8];
-  std::uint32_t quantity;
-  std::uint32_t price;
+    std::uint64_t sequence_num;
+    std::uint64_t timestamp;
+    char ticker[8];
+    std::uint32_t quantity;
+    std::uint32_t price;
 } trade_msg;
 
 static_assert(sizeof(trade_msg) == 32, "trade_msg size mismatch");
@@ -57,5 +57,4 @@ typedef struct {
         trade_msg trade;
     };
 
-} message;   
-
+} message;

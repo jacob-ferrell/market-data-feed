@@ -1,12 +1,10 @@
 
 #include "messages.h"
 #include "parser.h"
+#include "order_book.h"
 #include <chrono>
 #include <cstdio>
 
-void log_metrics(long file_size, std::chrono::steady_clock::time_point start, std::chrono::steady_clock::time_point end) {
-   
-}
 
 int main (int argc, char *argv[]) {
     // Open data binary
@@ -34,6 +32,7 @@ int main (int argc, char *argv[]) {
 
     while (parse_next_message(fp, &msg)) {
         total_messages++;
+        process_message(&msg);
         switch (msg.type) {
             case ADD: {add_count++; break;}
             case CANCEL: {cancel_count++; break;}

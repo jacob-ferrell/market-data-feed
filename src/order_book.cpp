@@ -2,27 +2,58 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
+#include "order_book.h"
+#include "flat_hash_map.h"
 #include "messages.h"
 
-typedef struct {
-    std::uint32_t price;
-    std::uint64_t quantity;
-} price_list_line;
-
-static const std::uint8_t MAX_PRICES_PER_SIDE = 8;
+static const uint8_t MAX_PRICES_PER_SIDE = 8;
 
 static const char* TICKER = "AAPL";
 
+static flat_hash_map live_orders = flat_hash_map{};
+
+static anomalies anomaly_counts = anomalies{};
+
 static std::array<std::array<price_list_line, MAX_PRICES_PER_SIDE>, 2> price_list;
 
-int index_side(Side side) {
-    return static_cast<int>(side);
-}
+bool apply_delta_to_price_list_line(
+    uint8_t side,
+    int64_t delta,
+    uint32_t price
+) {
 
-// [4, 3, 1, 0]
-// [0, 0, 0, 0]
+    uint8_t price_list_idx;
+
+    if (side == BID) {
+        price_list_idx = 0;
+    } else {
+        price_list_idx = 1;
+    }
+
+    for (int i = 0; i < MAX_PRICES_PER_SIDE; i++) {
+
+        price_list_line* cur_line = &price_list[price_list_idx][i];
+
+        if (cur_line->price == price) {
+
+            assert(
+                delta >= 0 
+                   || std::abs(delta) < (int64_t)cur_line->quantity
+                   && "applying delta would result in underflow"
+            );
+
+            cur_line->quantity += delta;
+            return true;
+        }
+
+    }
+
+    return false;
+
+}
 
 void insert_line(
     int i,
@@ -41,46 +72,11 @@ void insert_line(
     
 }
 
-bool add_ask(
-    const price_list_line& line, 
-    std::array<price_list_line, MAX_PRICES_PER_SIDE>& list
-) {
-    std::uint32_t prev_price = list[0].price;
-
-    for (int i = 0; i < MAX_PRICES_PER_SIDE; i++) {
-        price_list_line* cur = &list[i];
-
-        if (line.price == cur->price) {
-            cur->quantity += line.quantity;
-            return false;
-        }
-
-        if (line.price > prev_price) {
-
-            insert_line(
-                i,
-                line,
-                list
-            ); 
-
-            return true;
-
-        }
-
-        prev_price = cur->price;
-
-    }
-
-    assert(!"add_bid: unreachable");
-
-}
-
-bool add_order(
+bool add_line(
     const price_list_line& line, 
     std::array<price_list_line, MAX_PRICES_PER_SIDE>& list,
     std::function<bool(std::uint32_t, std::uint32_t)> cmp
 ) {
-    std::uint32_t prev_price = list[0].price;
 
     for (int i = 0; i < MAX_PRICES_PER_SIDE; i++) {
         price_list_line* cur = &list[i];
@@ -90,7 +86,7 @@ bool add_order(
             return false;
         }
 
-        if (cmp(line.price, prev_price)) {
+        if (cmp(line.price, cur->price) || cur->price == 0) {
 
             insert_line(
                 i,
@@ -102,19 +98,28 @@ bool add_order(
 
         }
 
-        prev_price = cur->price;
-
     }
 
     assert(!"add_bid: unreachable");
 
 }
 
-bool process_add(message* msg) {
-    add_order_msg order = msg->add;
+bool process_add(const add_order_msg& order) {
 
-    if (!strcmp(order.ticker, TICKER)) {
+    if (strcmp(order.ticker, TICKER)) {
         return false;    
+    }
+
+    live_order lo = {
+        order.order_id,
+        order.price,
+        order.quantity,
+        order.side
+    };
+
+    if (!live_orders.insert(lo)) {
+        anomaly_counts.add++;
+        return false;
     }
 
     price_list_line line = {
@@ -123,47 +128,119 @@ bool process_add(message* msg) {
     };
 
     switch (order.side) {
-        case BID: { return add_order(line, price_list[0], std::greater<uint32_t>()); }
-        case ASK: { return add_order(line, price_list[1], std::less<uint32_t>()); }
+        case BID: { return add_line(line, price_list[0], std::greater<uint32_t>()); }
+        case ASK: { return add_line(line, price_list[1], std::less<uint32_t>()); }
     }
 
     assert(!"process_add: unreachable");
 
 }
 
-bool process_cancel(message* msg) {
-if (!strcmp(msg->cancel.ticker, TICKER)) {
-        return false;    
+bool process_cancel(const cancel_order_msg& order) {
+
+    if (strcmp(order.ticker, TICKER)) {
+            return false;    
     }
+
+    live_order* existing_order = live_orders.get(order.order_id);
+
+    if (!existing_order) {
+        anomaly_counts.cancel++;
+        return false;
+    }
+
+    int64_t quantity_delta = -((int64_t)existing_order->quantity);
+
+    bool delta_applied = apply_delta_to_price_list_line(
+        existing_order->side, 
+        quantity_delta, 
+        existing_order->price
+    );
+
+    if (delta_applied) {
+        live_orders.remove(existing_order->order_id);
+    } else {
+        anomaly_counts.cancel++;
+    }
+
+    return delta_applied;
+     
 }
 
-bool process_modify(message* msg) {
-if (!strcmp(msg->modify.ticker, TICKER)) {
-        return false;    
+bool process_modify(const modify_order_msg& order) {
+
+    if (strcmp(order.ticker, TICKER)) {
+        return false;
     }
+
+    live_order* existing_order = live_orders.get(order.order_id);
+
+    if (!existing_order) {
+        anomaly_counts.modify++;
+        return false;
+    }
+
+    int64_t quantity_delta = order.quantity - existing_order->quantity;
+
+    bool delta_applied = apply_delta_to_price_list_line(
+        existing_order->side, 
+        quantity_delta, 
+        existing_order->price
+    );
+
+    if (delta_applied) {
+        existing_order->quantity = order.quantity;
+    } else {
+        anomaly_counts.modify++;
+    }
+
+    return delta_applied;
+
 }
 
-bool process_trade(message* msg) {
-if (!strcmp(msg->trade.ticker, TICKER)) {
+bool process_trade(const trade_msg& order) {
+
+    if (strcmp(order.ticker, TICKER)) {
         return false;    
     }
+
+    int64_t quantity_delta = -((int64_t)order.quantity);
+
+    bool bid_delta_applied = apply_delta_to_price_list_line(
+        BID,
+        quantity_delta,
+        order.price
+    );
+
+    if (!bid_delta_applied) {
+        anomaly_counts.trade++;
+        return false;
+    }
+
+    bool ask_delta_applied = apply_delta_to_price_list_line(
+        ASK,
+        quantity_delta,
+        order.price
+    );
+
+    if (!ask_delta_applied) {
+        anomaly_counts.trade++;
+    }
+
+    return ask_delta_applied;
+
 }
 
-bool process_message(message* msg) {
-    char* ticker;
+bool process_message(const message* msg) {
 
     switch (msg->type) {
-        case ADD: ticker = msg->add.ticker; break;
-        case CANCEL: ticker = msg->cancel.ticker; break;
-        case MODIFY: ticker = msg->modify.ticker; break;
-        case TRADE: ticker = msg->trade.ticker; break;
+        case ADD: return process_add(msg->add);
+        case CANCEL: return process_cancel(msg->cancel);
+        case MODIFY: return process_modify(msg->modify);
+        case TRADE: return process_trade(msg->trade);
     }
 
-    if (!strcmp(ticker, TICKER)) {
-        return false;    
-    }
-
-    
+    assert(!"process_message unreachable");
     
 }
 
