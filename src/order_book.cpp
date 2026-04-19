@@ -1,51 +1,51 @@
-
-#include <array>
 #include <cassert>
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
 #include <functional>
 #include "order_book.h"
-#include "flat_hash_map.h"
-#include "messages.h"
 
-static const uint8_t MAX_PRICES_PER_SIDE = 8;
+flat_hash_map live_orders = flat_hash_map{};
 
-static const char* TICKER = "AAPL";
+anomalies anomaly_counts = anomalies{};
 
-static flat_hash_map live_orders = flat_hash_map{};
+price_list_t price_list;
 
-static anomalies anomaly_counts = anomalies{};
+book_t book;
 
-static std::array<std::array<price_list_line, MAX_PRICES_PER_SIDE>, 2> price_list;
+books_t books;
 
-bool apply_delta_to_price_list_line(
-    uint8_t side,
+int ticker_index(const char* ticker) {
+      uint32_t h = 2166136261u;
+      for (int i = 0; ticker[i]; i++) {
+          h ^= (uint8_t)ticker[i];
+          h *= 16777619u;
+      }
+      return h % NUM_INSTRUMENTS;
+  }
+
+
+book_t& ticker_book(const char* ticker) {
+    return books[ticker_index(ticker)];
+}
+
+bool apply_delta_to_level(
+    price_list_t& list,
     int64_t delta,
     uint32_t price
 ) {
 
-    uint8_t price_list_idx;
+    for (int i = 0; i < MAX_LEVELS_PER_SIDE; i++) {
 
-    if (side == BID) {
-        price_list_idx = 0;
-    } else {
-        price_list_idx = 1;
-    }
+        price_level& cur_level = list[i];
 
-    for (int i = 0; i < MAX_PRICES_PER_SIDE; i++) {
-
-        price_list_line* cur_line = &price_list[price_list_idx][i];
-
-        if (cur_line->price == price) {
+        if (cur_level.price == price) {
 
             assert(
                 delta >= 0 
-                   || std::abs(delta) < (int64_t)cur_line->quantity
+                   || std::abs(delta) < (int64_t)cur_level.quantity
                    && "applying delta would result in underflow"
             );
 
-            cur_line->quantity += delta;
+            cur_level.quantity += delta;
             return true;
         }
 
@@ -55,42 +55,43 @@ bool apply_delta_to_price_list_line(
 
 }
 
-void insert_line(
+void insert_level(
     int i,
-    const price_list_line& line_to_insert, 
-    std::array<price_list_line, MAX_PRICES_PER_SIDE>& list
+    const price_level& level, 
+    price_list_t& list
 ) {
-    price_list_line tmp = list[i];
+    price_level tmp = list[i];
 
-    for (int j = i + 1; j < MAX_PRICES_PER_SIDE; j++) {
-        price_list_line tmp2 = list[j];
+    for (int j = i + 1; j < MAX_LEVELS_PER_SIDE; j++) {
+        price_level tmp2 = list[j];
         list[j] = tmp;
         tmp = tmp2;
     }
 
-    list[i] = line_to_insert;
+    list[i] = level;
     
 }
 
-bool add_line(
-    const price_list_line& line, 
-    std::array<price_list_line, MAX_PRICES_PER_SIDE>& list,
+bool add_level(
+    const price_level& level, 
+    price_list_t& list,
     std::function<bool(std::uint32_t, std::uint32_t)> cmp
 ) {
 
-    for (int i = 0; i < MAX_PRICES_PER_SIDE; i++) {
-        price_list_line* cur = &list[i];
+    for (int i = 0; i < MAX_LEVELS_PER_SIDE; i++) {
 
-        if (line.price == cur->price) {
-            cur->quantity += line.quantity;
+        price_level& cur = list[i];
+
+        if (level.price == cur.price) {
+            cur.quantity += level.quantity;
             return false;
         }
 
-        if (cmp(line.price, cur->price) || cur->price == 0) {
+        if (cmp(level.price, cur.price) || cur.price == 0) {
 
-            insert_line(
+            insert_level(
                 i,
-                line,
+                level,
                 list
             ); 
 
@@ -104,11 +105,7 @@ bool add_line(
 
 }
 
-bool process_add(const add_order_msg& order) {
-
-    if (strcmp(order.ticker, TICKER)) {
-        return false;    
-    }
+bool process_add(const add_order_msg& order, price_list_t& list) {
 
     live_order lo = {
         order.order_id,
@@ -122,25 +119,23 @@ bool process_add(const add_order_msg& order) {
         return false;
     }
 
-    price_list_line line = {
-        order.price,
+    price_level level = {
         order.quantity,
+        order.price,
     };
 
+    std::function<bool(std::uint32_t, std::uint32_t)> cmp;
+
     switch (order.side) {
-        case BID: { return add_line(line, price_list[0], std::greater<uint32_t>()); }
-        case ASK: { return add_line(line, price_list[1], std::less<uint32_t>()); }
+        case BID: cmp = std::greater<uint32_t>(); break;
+        case ASK: cmp = std::less<uint32_t>(); break;
+        default: assert(!"Invalid side");
     }
 
-    assert(!"process_add: unreachable");
-
+    return add_level(level, list, cmp);
 }
 
-bool process_cancel(const cancel_order_msg& order) {
-
-    if (strcmp(order.ticker, TICKER)) {
-            return false;    
-    }
+bool process_cancel(const cancel_order_msg& order, book_t& book) {
 
     live_order* existing_order = live_orders.get(order.order_id);
 
@@ -151,8 +146,8 @@ bool process_cancel(const cancel_order_msg& order) {
 
     int64_t quantity_delta = -((int64_t)existing_order->quantity);
 
-    bool delta_applied = apply_delta_to_price_list_line(
-        existing_order->side, 
+    bool delta_applied = apply_delta_to_level(
+        book[existing_order->side],
         quantity_delta, 
         existing_order->price
     );
@@ -167,23 +162,22 @@ bool process_cancel(const cancel_order_msg& order) {
      
 }
 
-bool process_modify(const modify_order_msg& order) {
-
-    if (strcmp(order.ticker, TICKER)) {
-        return false;
-    }
+bool process_modify(const modify_order_msg& order, book_t& book) {
 
     live_order* existing_order = live_orders.get(order.order_id);
+
+    assert(existing_order);
 
     if (!existing_order) {
         anomaly_counts.modify++;
         return false;
     }
 
+
     int64_t quantity_delta = order.quantity - existing_order->quantity;
 
-    bool delta_applied = apply_delta_to_price_list_line(
-        existing_order->side, 
+    bool delta_applied = apply_delta_to_level(
+        book[existing_order->side],
         quantity_delta, 
         existing_order->price
     );
@@ -198,16 +192,12 @@ bool process_modify(const modify_order_msg& order) {
 
 }
 
-bool process_trade(const trade_msg& order) {
-
-    if (strcmp(order.ticker, TICKER)) {
-        return false;    
-    }
+bool process_trade(const trade_msg& order, book_t& book) {
 
     int64_t quantity_delta = -((int64_t)order.quantity);
 
-    bool bid_delta_applied = apply_delta_to_price_list_line(
-        BID,
+    bool bid_delta_applied = apply_delta_to_level(
+        book[BID],
         quantity_delta,
         order.price
     );
@@ -217,8 +207,8 @@ bool process_trade(const trade_msg& order) {
         return false;
     }
 
-    bool ask_delta_applied = apply_delta_to_price_list_line(
-        ASK,
+    bool ask_delta_applied = apply_delta_to_level(
+        book[ASK],
         quantity_delta,
         order.price
     );
@@ -231,13 +221,13 @@ bool process_trade(const trade_msg& order) {
 
 }
 
-bool process_message(const message* msg) {
+bool process_message(const message& msg) {
 
-    switch (msg->type) {
-        case ADD: return process_add(msg->add);
-        case CANCEL: return process_cancel(msg->cancel);
-        case MODIFY: return process_modify(msg->modify);
-        case TRADE: return process_trade(msg->trade);
+    switch (msg.type) {
+        case ADD: return process_add(msg.add, ticker_book(msg.add.ticker)[msg.add.side]);
+        case CANCEL: return process_cancel(msg.cancel, ticker_book(msg.cancel.ticker));
+        case MODIFY: return process_modify(msg.modify, ticker_book(msg.modify.ticker));
+        case TRADE: return process_trade(msg.trade, ticker_book(msg.trade.ticker));
     }
 
     assert(!"process_message unreachable");
