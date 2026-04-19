@@ -4,7 +4,15 @@
 
 typedef enum { ADD, CANCEL, MODIFY, TRADE } MessageType;
 
-typedef enum { BID, ASK } Side;
+typedef enum { BID, ASK, NUM_SIDES /* not a side */ } Side;
+
+typedef struct {
+    std::uint64_t order_id;
+    std::uint32_t price;
+    std::uint32_t quantity;
+    Side side;
+} live_order;
+
 
 typedef struct {
     std::uint64_t order_id;

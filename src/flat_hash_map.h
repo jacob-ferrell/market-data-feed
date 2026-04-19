@@ -3,11 +3,12 @@
 #include <array>
 #include <cstdint>
 #include "messages.h"
-#include "order_book.h"
+
 
 class flat_hash_map {
 
-    static const uint64_t MAX_SIZE = 16000000;
+    // must be power of 2 for hash function to work properly
+    static const uint64_t MAX_SIZE = 16777216;
 
     uint64_t size = 0;
 
@@ -23,12 +24,18 @@ public:
     flat_hash_map operator=(const flat_hash_map&) = delete;
     flat_hash_map operator=(flat_hash_map&&) = delete;
 
-    bool insert(const live_order& live_order);
-    bool update(const uint64_t order_id, const uint32_t quantity);
-    bool remove(uint64_t order_id);
+    bool insert(const live_order& order);
+    bool update(const uint64_t& order_id, const uint32_t& quantity);
+    bool remove(const uint64_t& order_id);
     live_order* get(const uint64_t& order_id);
+
+    void clear() {
+        buckets.fill(live_order{});
+        size = 0;
+    };
 
 private:
     uint64_t hash(const uint64_t& hash);
-
+    bool exists(const live_order& order);
+    live_order& get_slot(const uint64_t& order_id);
 };

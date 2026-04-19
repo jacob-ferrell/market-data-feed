@@ -1,17 +1,23 @@
 #include "flat_hash_map.h"
 #include <sys/types.h>
 #include <cstdint>
+#include "messages.h"
+
+
+bool flat_hash_map::exists(const live_order& order) {
+    return order.order_id != 0;
+}
 
 bool flat_hash_map::insert(const live_order& order) {
 
-    live_order* existing_order = get(order.order_id);
+    live_order& existing_order = get_slot(order.order_id);
 
-    if (existing_order->order_id != 0) return false;
+    if (exists(existing_order)) return false;
 
-    existing_order->order_id = order.order_id;
-    existing_order->side = order.side;
-    existing_order->price = order.price;
-    existing_order->quantity = order.quantity;
+    existing_order.order_id = order.order_id;
+    existing_order.side = order.side;
+    existing_order.price = order.price;
+    existing_order.quantity = order.quantity;
 
     size++;
 
@@ -19,34 +25,33 @@ bool flat_hash_map::insert(const live_order& order) {
 
 }
 
-bool flat_hash_map::update(const uint64_t order_id, const uint32_t quantity) {
+bool flat_hash_map::update(const uint64_t& order_id, const uint32_t& quantity) {
 
-    live_order* order = get(order_id);
+    live_order& order = get_slot(order_id);
 
-    if (!order) return false;
+    if (!exists(order)) return false;
 
-    order->quantity = quantity;
+    order.quantity = quantity;
 
     return true;
 
 }
 
-bool flat_hash_map::remove(const uint64_t order_id) {
+bool flat_hash_map::remove(const uint64_t& order_id) {
 
-    live_order* order = get(order_id);
+    live_order& order = get_slot(order_id);
 
-    if (!order) return false;
+    if (!exists(order)) return false;
 
-    *order = live_order{};
+    order = live_order{};
 
     size--;
 
     return true;
 
-
 }
 
-live_order* flat_hash_map::get(const std::uint64_t& order_id) {
+live_order& flat_hash_map::get_slot(const std::uint64_t& order_id) {
 
     std::uint64_t hashed = hash(order_id);
 
@@ -54,18 +59,23 @@ live_order* flat_hash_map::get(const std::uint64_t& order_id) {
         hashed = hash(hashed + 1);
     }
 
-    if (buckets[hashed].order_id == 0) {
-        return nullptr;
-    }
-
-    return &buckets[hashed];
+    return buckets[hashed];
 
 }
 
-std::uint64_t flat_hash_map::hash(const std::uint64_t& order_id) {
+
+live_order* flat_hash_map::get(const std::uint64_t& order_id) {
+
+    live_order& order = get_slot(order_id);
+
+    if (exists(order)) return &order;
+
+    return nullptr;
+
+}
+
+std::uint64_t flat_hash_map::hash(const uint64_t& order_id) {
     return order_id & (capacity - 1);
 }
-
-bool remove(std::uint64_t order_id);
 
 

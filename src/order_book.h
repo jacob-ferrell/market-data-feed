@@ -1,12 +1,30 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <cstdlib>
 #include "messages.h"
+#include "flat_hash_map.h"
+
+static constexpr uint32_t NUM_INSTRUMENTS = 1000;
+static constexpr uint8_t MAX_LEVELS_PER_SIDE = 50;
 
 typedef struct {
-    std::uint32_t price;
     std::uint64_t quantity;
-} price_list_line;
+    std::uint32_t price;
+} price_level;
+
+using price_list_t = std::array<price_level, MAX_LEVELS_PER_SIDE>;
+
+extern price_list_t price_list;
+
+using book_t = std::array<price_list_t, NUM_SIDES>;
+
+extern book_t book;
+
+using books_t = std::array<book_t, NUM_INSTRUMENTS>;
+
+extern books_t books;
 
 typedef struct {
     std::uint64_t add;
@@ -15,13 +33,13 @@ typedef struct {
     std::uint64_t trade;
 } anomalies;
 
-typedef struct {
-    std::uint64_t order_id;
-    std::uint32_t price;
-    std::uint32_t quantity;
-    Side side;
-} live_order;
+extern anomalies anomaly_counts;
 
+extern flat_hash_map live_orders;
 
-bool process_message(const message* msg);
+book_t& ticker_book(const char* instrument);
+
+int ticker_index(const char* ticker);
+
+bool process_message(const message& msg);
 
