@@ -2,22 +2,11 @@
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
-#include <unordered_map>
-#include <unordered_set>
 #include "../src/messages.h"
 #include "../src/order_book.h"
+#include "../src/ticker_registry.h"
 
 static uint64_t seq = 1;
-
-std::unordered_set<uint32_t> ticker_indexes;
-
-static void make_ticker(int n, char* out) {
-      out[0] = 'A' + (n / 676) % 26;
-      out[1] = 'A' + (n / 26) % 26;
-      out[2] = 'A' + n % 26;
-      out[3] = '0' + n % 10;
-      out[4] = '\0';
-}
 
 static message make_add(uint64_t order_id, uint32_t price, uint32_t qty, Side side, const char* instrument) {
     message msg;
@@ -137,19 +126,10 @@ void test_instrument(const char* instrument) {
 
 int main() {
 
-    for (int i = 0; i < NUM_INSTRUMENTS; i++) {
+    initialize_tickers();
 
-        char ticker[5];
-
-        make_ticker(i, ticker);
-
-        int idx = ticker_index(ticker);
-
-        printf("i=%d ticker=%s idx=%d\n", i, ticker, idx);
-
-        assert(ticker_indexes.insert(idx).second);
-
-        test_instrument(ticker);
+    for (const auto& [key, value] : tickers) {
+        test_instrument(key.c_str());
     }
 
     return 0;

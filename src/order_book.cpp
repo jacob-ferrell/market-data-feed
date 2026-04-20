@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include "messages.h"
 #include "order_book.h"
 
 flat_hash_map live_orders = flat_hash_map{};
@@ -12,16 +14,6 @@ price_list_t price_list;
 book_t book;
 
 books_t books;
-
-int ticker_index(const char* ticker) {
-      uint32_t h = 2166136261u;
-      for (int i = 0; ticker[i]; i++) {
-          h ^= (uint8_t)ticker[i];
-          h *= 16777619u;
-      }
-      return h % NUM_INSTRUMENTS;
-  }
-
 
 book_t& ticker_book(const char* ticker) {
     return books[ticker_index(ticker)];
@@ -41,7 +33,7 @@ bool apply_delta_to_level(
 
             assert(
                 delta >= 0 
-                   || std::abs(delta) < (int64_t)cur_level.quantity
+                   || std::abs(delta) <= (int64_t)cur_level.quantity
                    && "applying delta would result in underflow"
             );
 
@@ -166,8 +158,6 @@ bool process_modify(const modify_order_msg& order, book_t& book) {
 
     live_order* existing_order = live_orders.get(order.order_id);
 
-    assert(existing_order);
-
     if (!existing_order) {
         anomaly_counts.modify++;
         return false;
@@ -194,12 +184,23 @@ bool process_modify(const modify_order_msg& order, book_t& book) {
 
 bool process_trade(const trade_msg& order, book_t& book) {
 
-    int64_t quantity_delta = -((int64_t)order.quantity);
+    live_order* bid_order = live_orders.get(order.bid_order_id);
+
+    live_order* ask_order = live_orders.get(order.ask_order_id);
+
+    if (!bid_order || !ask_order) {
+        anomaly_counts.trade++;
+        return false;
+    }
+
+    assert(bid_order->price == ask_order->price);
+
+    int64_t quantity_delta = -((int64_t)std::min(bid_order->quantity, ask_order->quantity));
 
     bool bid_delta_applied = apply_delta_to_level(
         book[BID],
         quantity_delta,
-        order.price
+        bid_order->price
     );
 
     if (!bid_delta_applied) {
@@ -210,14 +211,14 @@ bool process_trade(const trade_msg& order, book_t& book) {
     bool ask_delta_applied = apply_delta_to_level(
         book[ASK],
         quantity_delta,
-        order.price
+        ask_order->price
     );
 
-    if (!ask_delta_applied) {
-        anomaly_counts.trade++;
-    }
+    assert(ask_delta_applied);
 
-    return ask_delta_applied;
+    live_orders.apply_trade(*bid_order, *ask_order, quantity_delta);
+
+    return true;
 
 }
 

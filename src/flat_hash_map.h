@@ -34,6 +34,9 @@ public:
         size = 0;
     };
 
+    void apply_trade(live_order& bid, live_order& ask);
+    void apply_trade(live_order& bid, live_order& ask, int64_t delta);
+
 private:
     uint64_t hash(const uint64_t& hash);
     bool exists(const live_order& order);

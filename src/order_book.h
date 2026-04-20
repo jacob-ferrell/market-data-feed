@@ -3,11 +3,10 @@
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include "constants.h"
 #include "messages.h"
 #include "flat_hash_map.h"
-
-static constexpr uint32_t NUM_INSTRUMENTS = 1000;
-static constexpr uint8_t MAX_LEVELS_PER_SIDE = 50;
+#include "ticker_registry.h"
 
 typedef struct {
     std::uint64_t quantity;
