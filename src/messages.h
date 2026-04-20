@@ -48,12 +48,12 @@ static_assert(sizeof(modify_order_msg) == 40, "modify_order_msg size mismatch");
 typedef struct {
     std::uint64_t sequence_num;
     std::uint64_t timestamp;
+    std::uint64_t bid_order_id;
+    std::uint64_t ask_order_id;
     char ticker[8];
-    std::uint32_t quantity;
-    std::uint32_t price;
 } trade_msg;
 
-static_assert(sizeof(trade_msg) == 32, "trade_msg size mismatch");
+static_assert(sizeof(trade_msg) == 40, "trade_msg size mismatch");
 
 typedef struct {
     std::uint8_t type;

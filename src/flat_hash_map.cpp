@@ -3,6 +3,18 @@
 #include <cstdint>
 #include "messages.h"
 
+void flat_hash_map::apply_trade(live_order& bid, live_order& ask) {
+    int64_t delta = -((int64_t)std::min(bid.quantity, ask.quantity));
+    apply_trade(bid, ask, delta);
+}
+
+void flat_hash_map::apply_trade(live_order& bid, live_order& ask, int64_t delta) {
+    bid.quantity += delta;
+    ask.quantity += delta;
+
+    if (bid.quantity == 0) remove(bid.order_id);
+    if (ask.quantity == 0) remove(ask.order_id);
+}
 
 bool flat_hash_map::exists(const live_order& order) {
     return order.order_id != 0;

@@ -2,9 +2,33 @@
 #include "messages.h"
 #include "parser.h"
 #include "order_book.h"
+#include "ticker_registry.h"
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 
+long rss_kb() {
+
+    FILE* f = fopen("/proc/self/status", "r");
+
+    if (!f) return -1;
+
+    char line[128];
+
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "VmRSS:", 6) == 0) {
+            long kb;
+            sscanf(line + 6, "%ld", &kb);
+            fclose(f);
+            return kb;
+        }
+    }
+
+    fclose(f);
+
+    return -1;
+
+}
 
 int main (int argc, char *argv[]) {
     // Open data binary
@@ -14,6 +38,8 @@ int main (int argc, char *argv[]) {
         perror("fopen");
         return 1;
     }
+
+    initialize_tickers();
 
     // get total file size
     fseek(fp, 0, SEEK_END);
@@ -28,11 +54,14 @@ int main (int argc, char *argv[]) {
 
     message msg;
 
+
     auto start = std::chrono::steady_clock::now();
+
+    printf("RSS after init: %ld MB\n", rss_kb() / 1024);
 
     while (parse_next_message(fp, &msg)) {
         total_messages++;
-        process_message(&msg);
+        process_message(msg);
         switch (msg.type) {
             case ADD: {add_count++; break;}
             case CANCEL: {cancel_count++; break;}
@@ -40,6 +69,8 @@ int main (int argc, char *argv[]) {
             case TRADE: {trade_count++; break;}
         }
     }
+
+    printf("RSS after replay: %ld MB\n", rss_kb() / 1024);
 
     auto end = std::chrono::steady_clock::now();
  
@@ -54,6 +85,12 @@ int main (int argc, char *argv[]) {
     std::printf("Trade:  %lu\n", trade_count);
     std::printf("Time:   %.3f seconds\n", seconds);
     std::printf("Throughput: %.0f msg/sec\n", throughput);
+
+    std::printf("\nAnomalies:\n");
+    std::printf("  Add:    %lu\n", anomaly_counts.add);
+    std::printf("  Cancel: %lu\n", anomaly_counts.cancel);
+    std::printf("  Modify: %lu\n", anomaly_counts.modify);
+    std::printf("  Trade:  %lu\n", anomaly_counts.trade);
 
     fclose(fp);
 

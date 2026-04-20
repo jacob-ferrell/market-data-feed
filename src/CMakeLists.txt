@@ -11,4 +11,10 @@
 #
 # add_executable(feed_processor main.cpp)
 # target_link_libraries(feed_processor PRIVATE feed_lib pthread)
-add_executable(market_data_feed main.cpp parser.cpp)
+add_executable(market_data_feed
+      main.cpp
+      parser.cpp
+      order_book.cpp
+      flat_hash_map.cpp
+      ticker_registry.cpp
+  )
