@@ -2,12 +2,16 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include "constants.h"
 #include "messages.h"
+#include "ticker_registry.h"
 #include "order_book.h"
 
 flat_hash_map live_orders = flat_hash_map{};
 
 anomalies anomaly_counts = anomalies{};
+
+uint32_t last_trade_prices[NUM_INSTRUMENTS];
 
 price_list_t price_list;
 
@@ -182,7 +186,7 @@ bool process_modify(const modify_order_msg& order, book_t& book) {
 
 }
 
-bool process_trade(const trade_msg& order, book_t& book) {
+bool process_trade(const trade_msg& order, book_t& book, uint32_t& last_trade_price) {
 
     live_order* bid_order = live_orders.get(order.bid_order_id);
 
@@ -218,6 +222,8 @@ bool process_trade(const trade_msg& order, book_t& book) {
 
     live_orders.apply_trade(*bid_order, *ask_order, quantity_delta);
 
+    last_trade_price = bid_order->price;
+
     return true;
 
 }
@@ -228,7 +234,10 @@ bool process_message(const message& msg) {
         case ADD: return process_add(msg.add, ticker_book(msg.add.ticker)[msg.add.side]);
         case CANCEL: return process_cancel(msg.cancel, ticker_book(msg.cancel.ticker));
         case MODIFY: return process_modify(msg.modify, ticker_book(msg.modify.ticker));
-        case TRADE: return process_trade(msg.trade, ticker_book(msg.trade.ticker));
+        case TRADE: {
+            int ticker_idx = ticker_index(msg.trade.ticker);
+            return process_trade(msg.trade, books[ticker_idx], last_trade_prices[ticker_idx]);
+        }
     }
 
     assert(!"process_message unreachable");

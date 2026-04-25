@@ -17,6 +17,8 @@ using price_list_t = std::array<price_level, MAX_LEVELS_PER_SIDE>;
 
 extern price_list_t price_list;
 
+extern uint32_t last_trade_prices[NUM_INSTRUMENTS];
+
 using book_t = std::array<price_list_t, NUM_SIDES>;
 
 extern book_t book;

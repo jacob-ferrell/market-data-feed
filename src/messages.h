@@ -66,3 +66,16 @@ typedef struct {
     };
 
 } message;
+
+typedef struct {
+    std::uint64_t timestamp;
+    std::uint32_t bid_price;
+    std::uint32_t bid_quantity;
+    std::uint32_t ask_price;
+    std::uint32_t ask_quantity;
+    std::uint32_t last_trade_price;
+    std::uint32_t instrument_idx;
+} snapshot;
+
+static_assert(sizeof(snapshot) == 32, "snapshot size mismatch");
+
