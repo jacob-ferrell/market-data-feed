@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include "constants.h"
@@ -244,7 +245,21 @@ bool process_message(const message& msg) {
     
 }
 
+snapshot get_ticker_snapshot(const char* ticker) {
+    int ticker_idx = ticker_index(ticker);
+    book book = books[ticker_idx];
+    price_level best_bid = book[BID][0];
+    price_level best_ask = book[ASK][0];
 
+    snapshot out = {
+        .timestamp = std::chrono::steady_clock::now(),
+        .best_bid = best_bid,
+        .best_ask = best_ask,
+        .last_trade_price = last_trade_prices[ticker_idx],
+        .instrument_idx = ticker_idx
+    };
+
+}
 
 
  

@@ -54,7 +54,6 @@ int main (int argc, char *argv[]) {
 
     message msg;
 
-
     auto start = std::chrono::steady_clock::now();
 
     printf("RSS after init: %ld MB\n", rss_kb() / 1024);

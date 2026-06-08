@@ -44,3 +44,5 @@ int ticker_index(const char* ticker);
 
 bool process_message(const message& msg);
 
+snapshot get_instrument_snapshot(const char* ticker);
+

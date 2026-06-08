@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "order_book.h"
 
 typedef enum { ADD, CANCEL, MODIFY, TRADE } MessageType;
 
@@ -69,10 +70,8 @@ typedef struct {
 
 typedef struct {
     std::uint64_t timestamp;
-    std::uint32_t bid_price;
-    std::uint32_t bid_quantity;
-    std::uint32_t ask_price;
-    std::uint32_t ask_quantity;
+    price_level best_bid;
+    price_level best_ask;
     std::uint32_t last_trade_price;
     std::uint32_t instrument_idx;
 } snapshot;
