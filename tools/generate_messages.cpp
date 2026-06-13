@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -12,6 +11,7 @@
 #include "../src/constants.h"
 #include "../src/messages.h"
 #include "../src/ticker_registry.h"
+#include "./timestamp_utils.h"
 
 struct {
     std::uint64_t add;
@@ -73,12 +73,6 @@ void write_type_byte(MessageType type) {
 std::uint64_t get_order_id() {
     return ++next_order_id;
 }
-
-uint64_t get_timestamp_ms() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-}
-
 std::uint32_t random_u32() {
     return dis(gen);
 }

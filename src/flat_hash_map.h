@@ -4,6 +4,12 @@
 #include <cstdint>
 #include "messages.h"
 
+typedef struct {
+    std::uint64_t order_id;
+    std::uint32_t price;
+    std::uint32_t quantity;
+    Side side;
+} live_order;
 
 class flat_hash_map {
 

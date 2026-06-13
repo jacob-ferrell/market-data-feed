@@ -1,19 +1,10 @@
 #pragma once
 
 #include <cstdint>
-#include "order_book.h"
 
 typedef enum { ADD, CANCEL, MODIFY, TRADE } MessageType;
 
 typedef enum { BID, ASK, NUM_SIDES /* not a side */ } Side;
-
-typedef struct {
-    std::uint64_t order_id;
-    std::uint32_t price;
-    std::uint32_t quantity;
-    Side side;
-} live_order;
-
 
 typedef struct {
     std::uint64_t order_id;
@@ -68,13 +59,4 @@ typedef struct {
 
 } message;
 
-typedef struct {
-    std::uint64_t timestamp;
-    price_level best_bid;
-    price_level best_ask;
-    std::uint32_t last_trade_price;
-    std::uint32_t instrument_idx;
-} snapshot;
-
-static_assert(sizeof(snapshot) == 32, "snapshot size mismatch");
 
