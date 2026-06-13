@@ -1,15 +1,14 @@
 #pragma once
 
-#include "messages.h"
-
+#include "order_book.h"
+#include "snapshot.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
 
-
 class ring_buffer {
 
-    static const int CAPACITY = 65536;
+    static const int CAPACITY = 1024;
 
     std::array<snapshot, CAPACITY> buffer{};
 
@@ -36,3 +35,9 @@ private:
     uint64_t get_tail_for_producer();
 
  };
+
+using ring_buffers_t = std::array<ring_buffer, NUM_INSTRUMENTS>;
+
+extern ring_buffers_t ring_buffers;
+
+

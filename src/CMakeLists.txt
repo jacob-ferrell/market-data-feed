@@ -17,4 +17,6 @@ add_executable(market_data_feed
       order_book.cpp
       flat_hash_map.cpp
       ticker_registry.cpp
+      spsc_ring_buffer.cpp
+      ../tools/timestamp_utils.cpp
   )

@@ -1,12 +1,13 @@
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include "constants.h"
 #include "messages.h"
 #include "ticker_registry.h"
 #include "order_book.h"
+#include "../tools/timestamp_utils.h"
+
 
 flat_hash_map live_orders = flat_hash_map{};
 
@@ -19,6 +20,8 @@ price_list_t price_list;
 book_t book;
 
 books_t books;
+
+ring_buffers_t ring_buffers;
 
 book_t& ticker_book(const char* ticker) {
     return books[ticker_index(ticker)];
@@ -69,10 +72,11 @@ void insert_level(
     
 }
 
+template<typename Cmp>
 bool add_level(
     const price_level& level, 
     price_list_t& list,
-    std::function<bool(std::uint32_t, std::uint32_t)> cmp
+    Cmp cmp
 ) {
 
     for (int i = 0; i < MAX_LEVELS_PER_SIDE; i++) {
@@ -221,45 +225,81 @@ bool process_trade(const trade_msg& order, book_t& book, uint32_t& last_trade_pr
 
     assert(ask_delta_applied);
 
+    uint32_t price = bid_order->price;
+
     live_orders.apply_trade(*bid_order, *ask_order, quantity_delta);
 
-    last_trade_price = bid_order->price;
+    last_trade_price = price;
 
     return true;
 
 }
 
-bool process_message(const message& msg) {
-
-    switch (msg.type) {
-        case ADD: return process_add(msg.add, ticker_book(msg.add.ticker)[msg.add.side]);
-        case CANCEL: return process_cancel(msg.cancel, ticker_book(msg.cancel.ticker));
-        case MODIFY: return process_modify(msg.modify, ticker_book(msg.modify.ticker));
-        case TRADE: {
-            int ticker_idx = ticker_index(msg.trade.ticker);
-            return process_trade(msg.trade, books[ticker_idx], last_trade_prices[ticker_idx]);
-        }
-    }
-
-    assert(!"process_message unreachable");
-    
-}
-
-snapshot get_ticker_snapshot(const char* ticker) {
-    int ticker_idx = ticker_index(ticker);
-    book book = books[ticker_idx];
+snapshot get_book_snapshot(const book_t& book, const int& ticker_idx) {
     price_level best_bid = book[BID][0];
     price_level best_ask = book[ASK][0];
 
     snapshot out = {
-        .timestamp = std::chrono::steady_clock::now(),
-        .best_bid = best_bid,
-        .best_ask = best_ask,
+        .timestamp = get_timestamp_ms(),
+        .best_bid_quantity = best_bid.quantity,
+        .best_ask_quantity = best_ask.quantity,
+        .best_bid_price = best_bid.price,
+        .best_ask_price = best_ask.price,
         .last_trade_price = last_trade_prices[ticker_idx],
-        .instrument_idx = ticker_idx
+        .instrument_idx = (uint32_t) ticker_idx
     };
+
+    return out;
 
 }
 
+bool publish_snapshot(const book_t& book, const int& ticker_idx) {
+    snapshot ss = get_book_snapshot(book, ticker_idx);    
 
+    return ring_buffers[ticker_idx].try_push(ss);
+
+}
  
+bool process_message(const message& msg) {
+
+    book_t* book = nullptr;
+    int ticker_idx;
+    bool success;
+
+    switch (msg.type) {
+        case ADD: {
+            ticker_idx = ticker_index(msg.add.ticker);
+            book = &books[ticker_idx];
+            success = process_add(msg.add, (*book)[msg.add.side]);
+            break;
+        }
+
+        case CANCEL: {
+            ticker_idx = ticker_index(msg.cancel.ticker);
+            book = &books[ticker_idx];
+            success = process_cancel(msg.cancel, *book);
+            break;
+        }
+        case MODIFY: {
+            ticker_idx = ticker_index(msg.modify.ticker);
+            book = &books[ticker_idx];
+            success = process_modify(msg.modify, *book);
+            break;
+        }
+        case TRADE: {
+            ticker_idx = ticker_index(msg.trade.ticker);
+            book = &books[ticker_idx];
+            success = process_trade(msg.trade, *book, last_trade_prices[ticker_idx]);
+            break;
+        }
+
+        default: assert(!"process_message unreachable");
+
+    }
+
+    publish_snapshot(*book, ticker_idx);    
+    
+    return success;
+
+}
+
