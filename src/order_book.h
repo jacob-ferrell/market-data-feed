@@ -10,6 +10,14 @@
 #include "ticker_registry.h"
 #include "snapshot.h"
 
+static const uint32_t LATENCIES_CAPACITY = 1000000;
+
+using latencies_t = std::array<uint32_t, LATENCIES_CAPACITY>;
+
+inline uint32_t latencies_size = 0;
+
+extern latencies_t latencies;
+
 typedef struct {
     std::uint64_t quantity;
     std::uint32_t price;

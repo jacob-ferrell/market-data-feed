@@ -6,11 +6,13 @@
 #include "snapshot.h"
 #include "ticker_registry.h"
 #include "spsc_ring_buffer.h"
+#include "../tools/timestamp_utils.h"
+#include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <thread>
 
@@ -61,6 +63,59 @@ void consumer_fun(const std::atomic<bool>& running) {
     }
 }
 
+void log_throughput(
+    long total_messages,
+    std::chrono::steady_clock::time_point start,
+    std::chrono::steady_clock::time_point end
+) {
+ 
+    double seconds = std::chrono::duration<double>(end - start).count();
+
+    double throughput = total_messages / seconds;
+
+    std::printf("Time:   %.3f seconds\n", seconds);
+    std::printf("Throughput: %.0f msg/sec\n", throughput);
+}
+
+void log_totals(
+    long total_messages,
+    long add_count,
+    long cancel_count,
+    long modify_count,
+    long trade_count,
+    std::chrono::steady_clock::time_point start,
+    std::chrono::steady_clock::time_point end
+) {
+
+    std::printf("Total messages: %lu\n", total_messages);
+    std::printf("Add:    %lu\n", add_count);
+    std::printf("Cancel: %lu\n", cancel_count);
+    std::printf("Modify: %lu\n", modify_count);
+    std::printf("Trade:  %lu\n", trade_count);
+}
+
+void log_anomalies(
+    const anomalies& counts
+) {
+    std::printf("\nAnomalies:\n");
+    std::printf("  Add:    %lu\n", anomaly_counts.add);
+    std::printf("  Cancel: %lu\n", anomaly_counts.cancel);
+    std::printf("  Modify: %lu\n", anomaly_counts.modify);
+    std::printf("  Trade:  %lu\n", anomaly_counts.trade);
+}
+
+void log_latency() {
+    std::sort(latencies.begin(), latencies.end());
+    size_t count = latencies.size();
+
+    uint64_t p50 = latencies[count * 0.50];
+    uint64_t p95 = latencies[count * 0.95];
+    uint64_t p99 = latencies[count * 0.99];
+    uint64_t p999 = latencies[count * 0.999];
+
+    std::printf("p50=%lu, p95=%lu, p99=%lu, p999=%lu\n", p50, p95, p99, p999);
+}
+
 int main (int argc, char *argv[]) {
     // Open data binary
     FILE* fp = fopen("data/data.bin", "rb");
@@ -89,10 +144,11 @@ int main (int argc, char *argv[]) {
 
     printf("RSS after init: %ld MB\n", rss_kb() / 1024);
 
-
     std::atomic<bool> running{true};
 
     std::thread consumer(consumer_fun, std::ref(running));
+
+    calibrate_cycles_per_ns();
 
     while (parse_next_message(fp, &msg)) {
         total_messages++;
@@ -112,25 +168,22 @@ int main (int argc, char *argv[]) {
     consumer.join();
 
     printf("RSS after replay: %ld MB\n", rss_kb() / 1024);
-
  
-    double seconds = std::chrono::duration<double>(end - start).count();
+    log_totals(
+        total_messages, 
+        add_count, 
+        cancel_count, 
+        modify_count, 
+        trade_count, 
+        start, 
+        end
+    );
 
-    double throughput = total_messages / seconds;
+    log_throughput(total_messages, start, end);
 
-    std::printf("Total messages: %lu\n", total_messages);
-    std::printf("Add:    %lu\n", add_count);
-    std::printf("Cancel: %lu\n", cancel_count);
-    std::printf("Modify: %lu\n", modify_count);
-    std::printf("Trade:  %lu\n", trade_count);
-    std::printf("Time:   %.3f seconds\n", seconds);
-    std::printf("Throughput: %.0f msg/sec\n", throughput);
+    log_anomalies(anomaly_counts);
 
-    std::printf("\nAnomalies:\n");
-    std::printf("  Add:    %lu\n", anomaly_counts.add);
-    std::printf("  Cancel: %lu\n", anomaly_counts.cancel);
-    std::printf("  Modify: %lu\n", anomaly_counts.modify);
-    std::printf("  Trade:  %lu\n", anomaly_counts.trade);
+    log_latency();
 
     fclose(fp);
 
