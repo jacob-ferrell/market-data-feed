@@ -12,6 +12,7 @@
 #include "../src/messages.h"
 #include "../src/ticker_registry.h"
 #include "./timestamp_utils.h"
+#include "../src/constants.h"
 
 struct {
     std::uint64_t add;
@@ -22,7 +23,6 @@ struct {
 
 static const std::uint32_t PRICE_RANGE_LO = 100000;   // $10.00
 static const std::uint32_t PRICE_RANGE_HI = 10000000; // $1000.00
-static const std::uint32_t NUM_MESSAGES   = 30000000;
 
 static std::uint64_t sequence_num = 0;
 static std::uint64_t next_order_id = 0;

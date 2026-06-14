@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <functional>
@@ -8,6 +9,7 @@
 #include "order_book.h"
 #include "../tools/timestamp_utils.h"
 
+latencies_t latencies; 
 
 flat_hash_map live_orders = flat_hash_map{};
 
@@ -104,6 +106,8 @@ bool add_level(
 
     assert(!"add_bid: unreachable");
 
+    return false;
+
 }
 
 bool process_add(const add_order_msg& order, price_list_t& list) {
@@ -125,15 +129,12 @@ bool process_add(const add_order_msg& order, price_list_t& list) {
         order.price,
     };
 
-    std::function<bool(std::uint32_t, std::uint32_t)> cmp;
-
-    switch (order.side) {
-        case BID: cmp = std::greater<uint32_t>(); break;
-        case ASK: cmp = std::less<uint32_t>(); break;
-        default: assert(!"Invalid side");
+    if (order.side == BID) {
+        return add_level(level, list, std::greater<uint32_t>());
+    } else {
+        return add_level(level, list, std::less<uint32_t>());
     }
 
-    return add_level(level, list, cmp);
 }
 
 bool process_cancel(const cancel_order_msg& order, book_t& book) {
@@ -223,7 +224,7 @@ bool process_trade(const trade_msg& order, book_t& book, uint32_t& last_trade_pr
         ask_order->price
     );
 
-    assert(ask_delta_applied);
+    assert(ask_delta_applied);;
 
     uint32_t price = bid_order->price;
 
@@ -259,14 +260,18 @@ bool publish_snapshot(const book_t& book, const int& ticker_idx) {
     return ring_buffers[ticker_idx].try_push(ss);
 
 }
- 
+
 bool process_message(const message& msg) {
 
     book_t* book = nullptr;
     int ticker_idx;
     bool success;
 
+    __asm__ volatile("lfence" ::: "memory");
+    uint64_t start = rdtsc();
+
     switch (msg.type) {
+
         case ADD: {
             ticker_idx = ticker_index(msg.add.ticker);
             book = &books[ticker_idx];
@@ -280,12 +285,14 @@ bool process_message(const message& msg) {
             success = process_cancel(msg.cancel, *book);
             break;
         }
+
         case MODIFY: {
             ticker_idx = ticker_index(msg.modify.ticker);
             book = &books[ticker_idx];
             success = process_modify(msg.modify, *book);
             break;
         }
+
         case TRADE: {
             ticker_idx = ticker_index(msg.trade.ticker);
             book = &books[ticker_idx];
@@ -297,8 +304,16 @@ bool process_message(const message& msg) {
 
     }
 
-    publish_snapshot(*book, ticker_idx);    
+    if (success) {
+        publish_snapshot(*book, ticker_idx);    
     
+        __asm__ volatile("lfence" ::: "memory");
+        uint64_t end = rdtsc();
+
+        latencies[latencies_size++ % LATENCIES_CAPACITY] = (uint32_t) calc_rdtsc_latency_in_ns(start, end);
+
+    }
+   
     return success;
 
 }
