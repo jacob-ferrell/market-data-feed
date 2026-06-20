@@ -18,6 +18,8 @@
 
 static int SPREAD_THRESHOLD = 500000;
 
+static int CORE_ID = 1;
+
 long rss_kb() {
 
     FILE* f = fopen("/proc/self/status", "r");
@@ -149,6 +151,26 @@ int main (int argc, char *argv[]) {
     std::thread consumer(consumer_fun, std::ref(running));
 
     calibrate_cycles_per_ns();
+
+    bool pin_thread = false;
+
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--pin") == 0) pin_thread = true;
+    }
+
+    if (pin_thread) {
+        // a bitmask representing which CPU cores a thread is allowed to run on
+        cpu_set_t cpuset;
+
+        // zero out the bitmask — no cores selected yet
+        CPU_ZERO(&cpuset);
+
+        // set the bit for core_id — allow the thread to run on that core only
+        CPU_SET(CORE_ID, &cpuset);
+
+        // apply the affinity mask to the current thread
+        pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    }
 
     while (parse_next_message(fp, &msg)) {
         total_messages++;
