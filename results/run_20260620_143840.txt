@@ -1,0 +1,16 @@
+RSS after init: 3 MB
+RSS after replay: 432 MB
+Total messages: 30000000
+Add:    17999683
+Cancel: 7499473
+Modify: 3002356
+Trade:  1498488
+Time:   7.383 seconds
+Throughput: 4063391 msg/sec
+
+Anomalies:
+  Add:    0
+  Cancel: 143
+  Modify: 59
+  Trade:  2347
+p50=125, p95=316, p99=435, p999=650
