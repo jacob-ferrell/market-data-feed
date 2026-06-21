@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <functional>
@@ -8,6 +9,7 @@
 #include "ticker_registry.h"
 #include "order_book.h"
 #include "../tools/timestamp_utils.h"
+#include "reporter.h"
 
 latencies_t latencies; 
 
@@ -310,7 +312,12 @@ bool process_message(const message& msg) {
         __asm__ volatile("lfence" ::: "memory");
         uint64_t end = rdtsc();
 
-        latencies[latencies_size++ % LATENCIES_CAPACITY] = (uint32_t) calc_rdtsc_latency_in_ns(start, end);
+        bool active = active_buffer.load(std::memory_order_relaxed);
+
+        latencies_t& buffer = double_buffer[active];
+
+        buffer[double_buffer_counts[active]++ % LATENCIES_CAPACITY] = 
+            (uint32_t) calc_rdtsc_latency_in_ns(start, end);
 
     }
    
