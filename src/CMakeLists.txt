@@ -19,4 +19,6 @@ add_executable(market_data_feed
       ticker_registry.cpp
       spsc_ring_buffer.cpp
       ../tools/timestamp_utils.cpp
+      reporter.cpp
+      consumer.cpp
   )

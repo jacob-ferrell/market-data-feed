@@ -1,5 +1,4 @@
 #include "./messages.h" 
-#include <cstdint>
 #include <cstdio>
 
 bool parse_add_message(FILE* fp, message* out) {
