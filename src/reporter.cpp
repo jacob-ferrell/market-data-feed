@@ -35,6 +35,18 @@ bool swap_active_buffer() {
 
 void reporter_fun(const std::atomic<bool>& running, const std::atomic<uint64_t>& total_messages) {
 
+    // struct that holds the scheduling priority value
+    struct sched_param param;
+
+    // set the priority to 0 — required for SCHED_IDLE, which ignores priority anyway
+    param.sched_priority = 0;
+
+    // apply the scheduling policy to the current thread:
+    // pthread_self() gets the current thread's handle
+    // SCHED_IDLE is the lowest possible scheduling class — only runs when nothing else needs CPU
+    // &param passes the priority struct
+    pthread_setschedparam(pthread_self(), SCHED_IDLE, &param);
+
     uint64_t prev_total = 0;
     uint32_t elapsed_seconds = 0;
 
