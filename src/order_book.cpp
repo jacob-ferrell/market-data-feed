@@ -312,12 +312,21 @@ bool process_message(const message& msg) {
         __asm__ volatile("lfence" ::: "memory");
         uint64_t end = rdtsc();
 
-        bool active = active_buffer.load(std::memory_order_relaxed);
+        bool active = active_buffer.load(std::memory_order_acquire);
 
-        latencies_t& buffer = double_buffer[active];
 
-        buffer[double_buffer_counts[active]++ % LATENCIES_CAPACITY] = 
+        latency_buffer& buffer = double_buffer[active];
+
+        uint32_t count = buffer.count.load(std::memory_order_relaxed);
+
+        buffer.seq.fetch_add(1, std::memory_order_relaxed);
+
+        buffer.samples[count % LATENCIES_CAPACITY] = 
             (uint32_t) calc_rdtsc_latency_in_ns(start, end);
+
+        buffer.count.store(count + 1, std::memory_order_relaxed);
+
+        buffer.seq.fetch_add(1, std::memory_order_release);
 
     }
    
