@@ -1,5 +1,6 @@
 #pragma once
 #include "order_book.h"
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -10,11 +11,13 @@ static const uint32_t DOUBLE_BUFFER_SIZE = 2;
 
 using latencies_t = std::array<uint32_t, LATENCIES_CAPACITY>;
 
-inline uint32_t latencies_size = 0;
+struct latency_buffer {
+    std::array<uint32_t, LATENCIES_CAPACITY> samples{};
+    std::atomic<std::uint32_t> count;
+    std::atomic<std::uint32_t> seq;
+};
 
-extern latencies_t latencies;
-
-inline std::array<latencies_t, DOUBLE_BUFFER_SIZE> double_buffer;
+inline latency_buffer double_buffer[DOUBLE_BUFFER_SIZE];
 
 inline std::atomic<bool> active_buffer{false};
 

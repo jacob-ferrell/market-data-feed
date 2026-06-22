@@ -4,16 +4,23 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <thread>
+#include <thread> 
+#include <immintrin.h> 
 
-void log_latency(latencies_t& latencies, uint32_t count) {
-    uint32_t end = std::min((uint32_t) latencies.size(), count);
-    std::sort(latencies.begin(), latencies.begin() + end);
+void log_latency(latency_buffer& buffer) {
 
-    uint64_t p50 = latencies[count * 0.50];
-    uint64_t p95 = latencies[count * 0.95];
-    uint64_t p99 = latencies[count * 0.99];
-    uint64_t p999 = latencies[count * 0.999];
+    uint32_t end = std::min(
+        (uint32_t) buffer.samples.size(), 
+        buffer.count.load(
+        std::memory_order_relaxed)
+    );
+
+    std::sort(buffer.samples.begin(), buffer.samples.begin() + end);
+
+    uint64_t p50 = buffer.samples[end * 0.50];
+    uint64_t p95 = buffer.samples[end * 0.95];
+    uint64_t p99 = buffer.samples[end * 0.99];
+    uint64_t p999 = buffer.samples[end * 0.999];
 
     std::printf("p50=%lu, p95=%lu, p99=%lu, p999=%lu\n", p50, p95, p99, p999);
 }
@@ -22,15 +29,20 @@ void log_latency(latencies_t& latencies, uint32_t count) {
 //swaps buffers and returns the now inactive buffer
 //that is ready to be read
 bool swap_active_buffer() {
-    bool prev_active_buffer = active_buffer.load(std::memory_order_relaxed);
-    active_buffer.store(!prev_active_buffer, std::memory_order_release);
+    bool prev_active = active_buffer.load(std::memory_order_relaxed);
+    active_buffer.store(!prev_active, std::memory_order_release);
 
-    uint32_t count = double_buffer_counts[prev_active_buffer] = 0;
+    latency_buffer& prev_active_buffer = double_buffer[prev_active];
 
-    log_latency(double_buffer[prev_active_buffer], count);
+    // spin when seq is odd
+    while (prev_active_buffer.seq.load(std::memory_order_acquire) & 1) {
+        _mm_pause();
+    }
 
-    double_buffer_counts[prev_active_buffer] = 0;
-    return prev_active_buffer;
+    log_latency(prev_active_buffer);
+
+    prev_active_buffer.count.store(0, std::memory_order_release);
+    return prev_active;
 }
 
 void reporter_fun(const std::atomic<bool>& running, const std::atomic<uint64_t>& total_messages) {
@@ -54,7 +66,7 @@ void reporter_fun(const std::atomic<bool>& running, const std::atomic<uint64_t>&
         std::this_thread::sleep_for(std::chrono::seconds(1));
         elapsed_seconds++;
         std::printf("T+%us - T+%us:\n", elapsed_seconds - 1, elapsed_seconds);
-        latencies_t inactive = double_buffer[swap_active_buffer()];
+        swap_active_buffer();
 
         uint64_t total = total_messages.load(std::memory_order_relaxed); 
         uint64_t cur_total = total - prev_total;    
