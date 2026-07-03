@@ -1,0 +1,36 @@
+RSS after init: 3 MB
+T+0s - T+1s:
+p50=163, p95=318, p99=381, p999=758
+Throughput: 3307763
+T+1s - T+2s:
+p50=120, p95=281, p99=365, p999=584
+Throughput: 4591707
+T+2s - T+3s:
+p50=109, p95=255, p99=321, p999=558
+Throughput: 4349294
+T+3s - T+4s:
+p50=111, p95=261, p99=325, p999=554
+Throughput: 4931207
+T+4s - T+5s:
+p50=109, p95=265, p99=332, p999=578
+Throughput: 4822236
+T+5s - T+6s:
+p50=111, p95=269, p99=329, p999=583
+Throughput: 4859957
+T+6s - T+7s:
+p50=116, p95=280, p99=355, p999=595
+Throughput: 3137836
+RSS after replay: 438 MB
+Total messages: 30000000
+Add:    17999683
+Cancel: 7499473
+Modify: 3002356
+Trade:  1498488
+Time:   6.905 seconds
+Throughput: 4344950 msg/sec
+
+Anomalies:
+  Add:    0
+  Cancel: 143
+  Modify: 59
+  Trade:  2347
